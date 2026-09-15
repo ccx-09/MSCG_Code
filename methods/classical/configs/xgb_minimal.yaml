@@ -1,0 +1,9 @@
+model:
+  hyperparameters:
+    max_depth: [6]
+    learning_rate: [0.1]
+    n_estimators: [800]
+    subsample: [0.8]
+    colsample_bytree: [0.8]
+    reg_alpha: [0.1]
+    reg_lambda: [1.0]

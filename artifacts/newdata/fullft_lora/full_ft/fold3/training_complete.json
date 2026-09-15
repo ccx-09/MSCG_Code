@@ -1,0 +1,5 @@
+{
+  "best_val_iou": 0.8617122064981342,
+  "best_epoch": 10,
+  "num_epochs": 30
+}

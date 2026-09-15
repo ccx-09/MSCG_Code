@@ -1,0 +1,40 @@
+{
+  "overall": {
+    "miou": 0.7646509097529923,
+    "dice": 0.864112316121244,
+    "accuracy": 0.8851690587549628
+  },
+  "per_scale_miou": {
+    "s1": 0.43127112758945385,
+    "s2": 0.8033676864536287,
+    "s3": 0.6852957546959045,
+    "s4": 0.740887242034676,
+    "s5": 0.7405955784080582
+  },
+  "per_severity_miou": {
+    "0": 0.6868398506249808,
+    "1": 0.6828911348200913,
+    "2": 0.6784030872417368,
+    "3": 0.6795738071173391,
+    "4": 0.6773900937595801,
+    "5": 0.6766028934543372
+  },
+  "per_corruption_miou": {
+    "clean": 0.6868398540296548,
+    "fog": 0.671490637749227,
+    "gaussian_blur": 0.6786393466933502,
+    "shot_noise": 0.6841640728731448
+  },
+  "brittleness_coefficient": 0.05680926667153076,
+  "meta": {
+    "num_classes": 2,
+    "ws1_json": "external_dataset/folds/fold1_test.json",
+    "pred_dir": "external_cache/pred_deeplabv3/fold1",
+    "gt_dir": "external_dataset/masks",
+    "num_pred_files_found": 7032,
+    "num_images_in_json": 7032,
+    "num_pred_matched": 7032,
+    "num_skipped_no_meta": 0,
+    "num_skipped_no_gt": 0
+  }
+}

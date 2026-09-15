@@ -1,0 +1,52 @@
+{
+  "metric": "best_validation_miou",
+  "aggregation": "mean and standard deviation across fold-level best validation mIoU values",
+  "per_fold": [
+    {
+      "fold": 0,
+      "best_val_iou": 0.8337,
+      "best_epoch": null,
+      "num_epochs": null,
+      "source": "legacy fullft_lora_comparison.json"
+    },
+    {
+      "fold": 1,
+      "best_val_iou": 0.835,
+      "best_epoch": null,
+      "num_epochs": null,
+      "source": "legacy fullft_lora_comparison.json"
+    },
+    {
+      "fold": 2,
+      "best_val_iou": 0.832,
+      "best_epoch": null,
+      "num_epochs": null,
+      "source": "legacy fullft_lora_comparison.json"
+    },
+    {
+      "fold": 3,
+      "best_val_iou": 0.8617122064981342,
+      "best_epoch": 10,
+      "num_epochs": 30,
+      "training_time_seconds": 257472,
+      "checkpoint_size_bytes": 7692716745,
+      "source": "external_cache/fullft/full_ft/fold3/training_complete.json"
+    },
+    {
+      "fold": 4,
+      "best_val_iou": 0.8440984213714204,
+      "best_epoch": 4,
+      "num_epochs": 24,
+      "training_time_seconds": 257583,
+      "checkpoint_size_bytes": 7692716745,
+      "source": "external_cache/fullft/full_ft/fold4/training_complete.json"
+    }
+  ],
+  "summary": {
+    "num_folds": 5,
+    "mean": 0.8413021255739109,
+    "sample_std": 0.012333179980282587,
+    "population_std": 0.011031131525860553
+  },
+  "provenance_note": "fold0-fold2 were retained in the trusted legacy comparison JSON; fold3-fold4 were recovered from and verified against the original server training cache."
+}

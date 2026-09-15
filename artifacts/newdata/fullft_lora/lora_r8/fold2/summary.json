@@ -1,0 +1,40 @@
+{
+  "overall": {
+    "miou": 0.8528623841039145,
+    "dice": 0.9198866421497867,
+    "accuracy": 0.9293563334203839
+  },
+  "per_scale_miou": {
+    "s1": 0.7799309078830415,
+    "s2": 0.8556285934844419,
+    "s3": 0.7291649005329671,
+    "s4": 0.8354963322446795,
+    "s5": 0.8328150854531846
+  },
+  "per_severity_miou": {
+    "0": 0.849079460678128,
+    "1": 0.8122785250662181,
+    "2": 0.7988581932735915,
+    "3": 0.7904017970709907,
+    "4": 0.8058804241234101,
+    "5": 0.7831445833056391
+  },
+  "per_corruption_miou": {
+    "clean": 0.8475455773114967,
+    "fog": 0.7485023343981473,
+    "gaussian_blur": 0.7913687033070625,
+    "shot_noise": 0.8390120406619453
+  },
+  "brittleness_coefficient": -0.019122371786613104,
+  "meta": {
+    "num_classes": 2,
+    "ws1_json": "external_dataset/folds/fold2_test.json",
+    "pred_dir": "external_cache/pred_sam/fold2",
+    "gt_dir": "external_dataset/masks",
+    "num_pred_files_found": 14064,
+    "num_images_in_json": 7032,
+    "num_pred_matched": 14064,
+    "num_skipped_no_meta": 0,
+    "num_skipped_no_gt": 0
+  }
+}

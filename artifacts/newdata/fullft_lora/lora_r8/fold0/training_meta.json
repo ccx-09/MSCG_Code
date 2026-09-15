@@ -1,0 +1,10 @@
+{
+  "config": "lora_r8",
+  "fold": 0,
+  "training_time_seconds": 0,
+  "checkpoint_size_bytes": 55689228,
+  "best_val_iou": 0,
+  "trainable_params_m": 6.0,
+  "trainable_param_pct": 0.94,
+  "total_params_m": 641
+}

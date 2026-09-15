@@ -1,0 +1,236 @@
+# MSCG 公开版实验完整记录
+
+本文件记录当前公开副本中实际保留的实验配置、结果文件和统计口径。结果数值以 `artifacts/newdata/` 下的 JSON/CSV 文件为准；未打包的数据集、模型权重和实验缓存不属于本公开版本。
+
+## 1. 公开版本范围
+
+### 已包含
+
+- SAM+LoRA、DeepLabV3+、VGG16+XGBoost 的训练/推理代码；
+- 评估、鲁棒性和推理速度分析脚本；
+- 五折实验的 JSON、CSV 和选定热图结果；
+- Full FT/LoRA 对比结果和 RTX 4090 推理基准结果；
+- 图表及 LaTeX 表格生成脚本。
+
+### 未包含
+
+- MSCG 原始图像、mask 和 fold manifest；
+- SAM ViT-H 预训练权重和训练 checkpoint；
+- 实验缓存；
+- 论文 LaTeX 源文件和编译文件。
+
+因此，本仓库可以直接检查处理后的结果，并根据已包含的指标重新生成主要图表；重新训练或重新评估需要外部数据集和模型权重。
+
+## 2. 实验环境
+
+### 硬件
+
+- GPU：NVIDIA GeForce RTX 4090，24 GB 显存
+- CPU：AMD EPYC 系列多核处理器
+- 内存：64 GB 以上
+
+### 软件
+
+- OS：Ubuntu 22.04 LTS
+- CUDA：12.6
+- cuDNN：8.9.0
+- Python：3.12.9（Miniconda）
+- PyTorch：2.6.0+cu126
+- torchvision：0.21.0+cu126
+
+### 主要 Python 依赖
+
+```text
+numpy: 2.1.2
+opencv-python-headless: 5.0.0.93
+matplotlib: 3.11.1
+seaborn: 0.13.2
+scipy: 1.18.0
+pandas: 3.0.5
+tabulate: 0.9.0
+segmentation-models-pytorch: 0.5.0
+xgboost: 3.4.0
+scikit-learn: 1.9.0
+pyyaml: 6.0.1
+timm: 1.0.28
+segment-anything: 1.0（按实验环境使用 `--no-deps` 安装）
+```
+
+图表生成脚本至少需要 `numpy`、`matplotlib` 和 `seaborn`。训练和评估脚本还需要 CUDA、PyTorch、数据集及 SAM checkpoint。
+
+## 3. 数据集与实验协议
+
+- 数据集：MSCG（Multi-Scale Complexity Grid）新版本；
+- 总 composite 数：35,136 张；
+- 五折测试集：fold0–fold3 各 7,032 张，fold4 为 7,008 张，总计 35,136 张；
+- 数据结构：`composites/`、`masks/` 和 `folds/`，这些内容位于外部数据根目录，未随仓库发布；
+- 退化类型：`clean`、`fog`、`gaussian_blur`、`shot_noise`；
+- 严重度：`k0`（clean）至 `k5`；
+- 尺度分箱：`s1`（<1%）、`s2`（1–3%）、`s3`（3–10%）、`s4`（10–30%）、`s5`（>30%）；
+- 主要评估指标：mIoU、Dice、Accuracy 和 Brittleness。
+
+本记录中的路径均使用相对路径或外部资源占位符。重新运行原始训练脚本时，需要将数据集、checkpoint、缓存和输出目录替换为本地路径。
+
+## 4. 三方法五折结果
+
+数据来源：`artifacts/newdata/ws1_kfold/three_way_comparison.json` 及各 fold 的 `summary.json`。
+
+### 总体结果
+
+| 方法 | mIoU | Dice | Accuracy | Brittleness |
+|---|---:|---:|---:|---:|
+| **SAM+LoRA（r8）** | **86.28% ± 0.69%** | 92.57% ± 0.40% | 93.55% ± 0.40% | 0.48% |
+| DeepLabV3+ | 76.54% ± 1.06% | 86.47% ± 0.69% | 88.48% ± 0.63% | 5.40% |
+| VGG16+XGBoost | 60.17% ± 0.48% | 74.66% ± 0.37% | 76.99% ± 0.45% | 4.39% |
+
+### 各折 mIoU
+
+| 方法 | Fold 0 | Fold 1 | Fold 2 | Fold 3 | Fold 4 | 均值 ± 标准差 |
+|---|---:|---:|---:|---:|---:|---:|
+| SAM+LoRA（r8） | 85.74% | 86.99% | 85.29% | 87.07% | 86.33% | 86.28% ± 0.69% |
+| DeepLabV3+ | 76.32% | 76.47% | 75.39% | 76.01% | 78.53% | 76.54% ± 1.06% |
+| VGG16+XGBoost | 59.56% | 61.02% | 60.26% | 59.93% | 60.06% | 60.17% ± 0.48% |
+
+### 配对统计检验
+
+三组比较均使用五个共享测试 fold 的配对 t-test。以下 p 值为 Bonferroni 校正后的结果，效应量为 Cohen's d：
+
+| 比较 | mIoU 差值 | 校正后 p 值 | Cohen's d |
+|---|---:|---:|---:|
+| SAM+LoRA − DeepLabV3+ | +9.74 pp | 1.88 × 10⁻⁴ | 7.82 |
+| SAM+LoRA − VGG16+XGBoost | +26.12 pp | 5.02 × 10⁻⁷ | 34.59 |
+| DeepLabV3+ − VGG16+XGBoost | +16.38 pp | 3.01 × 10⁻⁵ | 12.41 |
+
+## 5. Full FT 与 LoRA 对比
+
+数据来源：`artifacts/newdata/fullft_lora_comparison.json`。
+
+### 测试结果
+
+| 配置 | 折数 | Test mIoU | Test Dice | Val mIoU |
+|---|---:|---:|---:|---:|
+| Full FT | 5 | 86.57% ± 0.90% | 92.73% ± 0.54% | 84.13% ± 1.10% |
+| LoRA r16 | 5 | 86.41% ± 0.61% | 92.60% ± 0.35% | 83.20% ± 0.80% |
+| LoRA r8 | 5 | 86.28% ± 0.69% | 92.57% ± 0.40% | 未记录 |
+| LoRA r4 | 5 | 86.16% ± 1.32% | 92.50% ± 0.80% | 82.00% ± 1.50% |
+
+以当前五折 Full FT 均值为参照，LoRA r16/r8/r4 的 mIoU 分别为 Full FT 的 99.81%、99.67% 和 99.53%。因此，当前公开结果不支持“LoRA 超过 Full FT”的表述；不同配置的协议和统计结果应以该 JSON 文件为准。
+
+### 资源信息
+
+| 配置 | 可训练参数 | 参数占比 | 训练时间 | checkpoint 大小 |
+|---|---:|---:|---:|---:|
+| Full FT | 641M | 100% | 约 71.54 h/折* | 约 7.16 GiB/折* |
+| LoRA r16 | 8M | 1.25% | 2.5 h/折 | 90.7 MB |
+| LoRA r8 | 6M | 0.94% | 未记录** | 53.1 MB |
+| LoRA r4 | 5M | 0.79% | 2.5 h/折 | 57 MB |
+
+\* Full FT 的时间和 checkpoint 大小来自当前公开副本中 fold3/fold4 的 `training_meta.json`，不是五折完整平均值。汇总 JSON 没有为 Full FT 提供完整的资源字段。
+
+\** LoRA r8 的汇总 JSON 和 fold-level metadata 将训练时间记为 0，结合 `best_val_iou=0` 判断为缺失元数据，不能解释为零小时训练。
+
+## 6. 严重度鲁棒性
+
+端点鲁棒性由 `analysis/compute_effective_robustness.py` 根据 fold0 的 `per_cell.csv` 计算，按每个 cell 的 `count` 加权。结果如下：
+
+| 指标 | SAM+LoRA（r8） | VGG16+XGBoost |
+|---|---:|---:|
+| mIoU@k0（clean） | 82.74% | 57.81% |
+| mIoU@k5 | 81.21% | 53.95% |
+| ER-end（k5/k0） | 98.16% | 93.32% |
+| ER-AUS | 99.15% | 95.52% |
+| k5 保持 ≥60% | 是 | 否 |
+
+fold0 的逐级 mIoU 为：
+
+| 严重度 | k0 | k1 | k2 | k3 | k4 | k5 |
+|---|---:|---:|---:|---:|---:|---:|
+| SAM+LoRA（r8） | 82.74% | 82.39% | 82.32% | 82.01% | 81.53% | 81.21% |
+| VGG16+XGBoost | 57.81% | 55.24% | 55.38% | 54.49% | 54.46% | 53.95% |
+
+## 7. 尺度分析
+
+以下数值是各 fold `summary.json` 中 `per_scale_miou` 的五折简单平均，供 `generate_three_way_figures.py` 生成尺度图使用：
+
+| 方法 | s1 | s2 | s3 | s4 | s5 |
+|---|---:|---:|---:|---:|---:|
+| SAM+LoRA（r8） | 79.07% | 76.68% | 78.10% | 83.55% | 85.20% |
+| DeepLabV3+ | 54.59% | 63.96% | 66.29% | 75.90% | 73.35% |
+| VGG16+XGBoost | 41.87% | 48.84% | 50.86% | 56.87% | 57.50% |
+
+总体 mIoU、尺度 mIoU 和鲁棒性端点使用不同的结果文件及聚合口径。复现分析时应使用相应脚本和对应输入文件，不应将不同口径的数值直接混合比较。
+
+## 8. 推理速度基准
+
+数据来源：`artifacts/newdata/inference_benchmarks_rtx4090.json`。
+
+- GPU：RTX 4090
+- 输入尺寸：1024 × 1024
+- batch size：1
+- warm-up：10 次
+- 计时：100 次
+
+| 模型 | 平均延迟 | 标准差 | FPS |
+|---|---:|---:|---:|
+| SAM+LoRA | 241.8 ms | 1.29 ms | 4.13 |
+| DeepLabV3+ | 13.4 ms | 0.01 ms | 74.84 |
+
+在该测试配置下，DeepLabV3+ 的推理速度约为 SAM+LoRA 的 18.1 倍。
+
+## 9. 结果文件与复现命令
+
+### 主要结果文件
+
+```text
+artifacts/newdata/ws1_kfold/three_way_comparison.json
+artifacts/newdata/ws1_kfold/fold{0..4}/{sam,deeplabv3,xgb}/summary.json
+artifacts/newdata/ws1_kfold/fold{0..4}/{sam,deeplabv3,xgb}/per_cell.csv
+artifacts/newdata/ws1_kfold/fold{0..4}/{sam,deeplabv3,xgb}/per_image.csv
+artifacts/newdata/fullft_lora_comparison.json
+artifacts/newdata/inference_benchmarks_rtx4090.json
+```
+
+### 生成主要图表和表格
+
+从项目根目录执行：
+
+```bash
+python -m pip install numpy matplotlib seaborn
+python artifacts/code/generate_three_way_figures.py
+python artifacts/code/generate_fullft_vs_lora_figure.py
+```
+
+输出目录为 `figures_new/` 和 `tables/`。生成 fold0 鲁棒性结果时可执行：
+
+```bash
+python analysis/compute_effective_robustness.py \
+  --sam-csv artifacts/newdata/ws1_kfold/fold0/sam/per_cell.csv \
+  --cls-csv artifacts/newdata/ws1_kfold/fold0/xgb/per_cell.csv \
+  --output-dir figures_new
+```
+
+## 10. 原始训练脚本的外部路径
+
+`run_experiment.sh` 和 `run_fullft_lora.sh` 来自原始 Linux/GPU 实验环境。运行前需要将脚本中的路径替换为本地路径：
+
+```text
+PROJECT_ROOT  = 当前代码仓库根目录
+DATA_ROOT     = 外部 MSCG 数据集根目录
+SAM_CKPT      = 外部 SAM ViT-H checkpoint
+CACHE_DIR     = 本地实验缓存目录
+OUTPUT_DIR    = 本地结果输出目录
+```
+
+这些脚本不能在没有外部数据集和 checkpoint 的情况下完成训练或重新评估。公开版保留处理后的结果，便于在不下载大规模数据和权重的情况下检查论文结果。
+
+## 11. 当前版本状态
+
+- 处理后的结果文件：已包含；
+- 主要图表：可由脚本按需生成；
+- 原始数据与模型权重：未发布；
+- Full FT 部分资源元数据：仅部分 fold 有记录；
+- LoRA r8 训练时间元数据：缺失；
+- Figure 5 的 point-versus-box 输入 JSON：未包含在当前公开副本中。
+
+**公开版整理时间**：2026-09-15
+**RTX 4090 基准时间戳**：2026-08-30 04:30:53

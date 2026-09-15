@@ -1,0 +1,10 @@
+{
+  "config": "full_ft",
+  "fold": 3,
+  "training_time_seconds": 257472,
+  "checkpoint_size_bytes": 7692716745,
+  "best_val_iou": 0.8617122064981342,
+  "trainable_params_m": 641,
+  "trainable_param_pct": 100.0,
+  "total_params_m": 641
+}
