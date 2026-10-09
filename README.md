@@ -2,9 +2,9 @@
 
 This repository contains the training and analysis code, together with processed evaluation outputs, for the manuscript:
 
-**“Foundation Models for Complexity-Controlled Segmentation: A Three-Way Comparative Study of SAM+LoRA, DeepLabV3+, and Classical Machine Learning.”**
+**“MSCG: A Scale-Stratified Benchmark for Robust Segmentation under Controlled Corruptions.”**
 
-It is the trimmed public artifact package for the paper data link. The repository is intended to document the reported experiments and to regenerate the main result figures and the generated comparison table.
+It is the trimmed public artifact package for the paper data link. The repository documents the reported experiments and regenerates the main result figures and comparison tables.
 
 ## Scope of this release
 
@@ -129,16 +129,14 @@ The scripts require a Linux shell, CUDA-enabled PyTorch, the external MSCG datas
 
 ## Data and privacy note
 
-The raw dataset and model weights are not redistributed in this repository. The CSV files contain evaluation summaries and per-image metrics, not the source images. Before public release, check any external dataset license and the journal’s requirements for anonymous review or data availability.
+The raw MSCG images, masks, fold manifests, and model weights are not redistributed in this repository. The CSV files contain evaluation summaries and per-image metrics, not the source images. Check the applicable dataset licenses before redistributing any omitted materials.
 
 ## Citation
 
-Please cite the associated manuscript when using this code or the processed results:
+Please cite the associated manuscript when using this code or the processed results. Use its final bibliographic details when available:
 
 ```text
-Foundation Models for Complexity-Controlled Segmentation:
-A Three-Way Comparative Study of SAM+LoRA, DeepLabV3+, and Classical Machine Learning.
-Image and Vision Computing.
+MSCG: A Scale-Stratified Benchmark for Robust Segmentation under Controlled Corruptions.
 ```
 
 For the exact experimental settings, aggregation conventions, and result provenance, see `EXPERIMENT_FULL_RECORD.txt`.

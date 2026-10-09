@@ -3,12 +3,16 @@
 Generate three-way comparison figures and LaTeX table.
 """
 
+import argparse
 import json
+import sys
 import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from pathlib import Path
 from typing import Dict
+from matplotlib.lines import Line2D
+from matplotlib.patches import Patch
 
 # Set publication-quality style
 plt.rcParams['font.family'] = 'sans-serif'
@@ -34,35 +38,6 @@ LABELS = {
     'xgb': 'VGG16+XGBoost',
 }
 
-N_PAIRWISE_COMPARISONS = 3
-
-
-def format_p_value(p):
-    """Format adjusted p-values with enough precision for the figure labels."""
-    if p < 0.001:
-        return f"{p:.2e}"
-    else:
-        return f"{p:.3f}"
-
-
-def format_p_value_latex(p):
-    """Format adjusted p-values for use inside LaTeX math mode."""
-    if p < 0.001:
-        coefficient, exponent = f"{p:.2e}".split("e")
-        return rf"{coefficient} \times 10^{{{int(exponent)}}}"
-    return f"{p:.3f}"
-
-
-def bonferroni_adjust(p, n_comparisons=N_PAIRWISE_COMPARISONS):
-    """Return the Bonferroni-adjusted p-value, capped at one."""
-    return min(float(p) * n_comparisons, 1.0)
-
-
-def significance_marker(p):
-    """Mark significance using the adjusted p-value."""
-    return '***' if p < 0.001 else '**' if p < 0.01 else '*' if p < 0.05 else 'ns'
-
-
 def load_data(stats_dir: Path) -> Dict:
     """Load three-way comparison results."""
     with open(stats_dir / 'three_way_comparison.json', 'r') as f:
@@ -71,7 +46,7 @@ def load_data(stats_dir: Path) -> Dict:
     # Add per-scale data from fold summaries (point plot style)
     stats_dir_path = Path(stats_dir)
     per_scale_data = {}
-    for method in data['methods']:
+    for method in ['sam', 'deeplabv3', 'xgb']:
         per_scale_data[method] = {}
         for fold in range(data.get('num_folds', 5)):
             summary_file = stats_dir_path / f'fold{fold}' / method / 'summary.json'
@@ -119,11 +94,12 @@ def load_data(stats_dir: Path) -> Dict:
 
 
 def figure1_overall_comparison(data: Dict, output_dir: Path):
-    """Figure 1: Overall three-way method comparison with error bars"""
+    """Figure 1: Overall three-way comparison with fold-level points."""
 
-    fig, ax = plt.subplots(figsize=(10, 6))
+    fig, ax = plt.subplots(figsize=(11, 6.5))
 
-    methods = data['methods']
+    # Use the same descending mIoU order as the manuscript results table.
+    methods = data.get('rankings', data['methods'])
     method_names = [LABELS[m] for m in methods]
 
     # mIoU data
@@ -134,7 +110,8 @@ def figure1_overall_comparison(data: Dict, output_dir: Path):
     # Create bars
     x = np.arange(len(methods))
     bars = ax.bar(x, means, yerr=stds, capsize=10, color=colors,
-                   alpha=0.85, edgecolor='black', linewidth=1.5, width=0.6)
+                   alpha=0.85, edgecolor='black', linewidth=1.5, width=0.6,
+                   zorder=2)
 
     # Add value labels on bars
     for bar, mean, std in zip(bars, means, stds):
@@ -143,42 +120,52 @@ def figure1_overall_comparison(data: Dict, output_dir: Path):
                 f'{mean:.2f}%\n±{std:.2f}%',
                 ha='center', va='bottom', fontweight='bold', fontsize=10)
 
-    # Add significance brackets from pairwise tests
-    y_max = max(means) + max(stds) + 10
+    # Show the five fold-level values directly without inferential annotations.
+    fold_values_by_method = {
+        method: np.asarray(data['comparison'][method]['miou']['values']) * 100
+        for method in methods
+    }
+    offsets = np.linspace(-0.10, 0.10, len(next(iter(fold_values_by_method.values()))))
 
-    # Get p-values from pairwise tests
-    pairwise = data.get('pairwise_tests', {})
-    
-    # The JSON stores raw p-values. Adjust them before plotting and use the
-    # actual method positions so the annotations cannot be swapped when the
-    # data order changes.
-    p1 = bonferroni_adjust(pairwise.get('sam_vs_deeplabv3', {}).get('miou', {}).get('t_test', {}).get('p_value', 1))
-    p2 = bonferroni_adjust(pairwise.get('sam_vs_xgb', {}).get('miou', {}).get('t_test', {}).get('p_value', 1))
-    p3 = bonferroni_adjust(pairwise.get('xgb_vs_deeplabv3', {}).get('miou', {}).get('t_test', {}).get('p_value', 1))
+    # Connect the same held-out fold across methods to make the paired design visible.
+    for fold_idx, offset in enumerate(offsets):
+        ax.plot(
+            x + offset,
+            [fold_values_by_method[method][fold_idx] for method in methods],
+            color='0.45',
+            linewidth=0.8,
+            alpha=0.40,
+            zorder=1,
+        )
 
-    positions = {method: index for index, method in enumerate(methods)}
-
-    def add_significance_bracket(method_a, method_b, y, p_value):
-        x_a, x_b = positions[method_a], positions[method_b]
-        ax.plot([x_a, x_b], [y, y], 'k-', linewidth=1.5)
-        ax.text((x_a + x_b) / 2, y + 1,
-                f'{significance_marker(p_value)}\np_adj={format_p_value(p_value)}',
-                ha='center', va='bottom', fontsize=8)
-
-    # SAM vs XGBoost, SAM vs DeepLabV3+, and XGBoost vs DeepLabV3+
-    # are placed according to their actual x coordinates.
-    add_significance_bracket('sam', 'xgb', y_max, p2)
-    add_significance_bracket('sam', 'deeplabv3', y_max + 7, p1)
-    add_significance_bracket('xgb', 'deeplabv3', y_max - 7, p3)
+    for index, method in enumerate(methods):
+        ax.scatter(
+            np.full(len(offsets), x[index]) + offsets,
+            fold_values_by_method[method],
+            s=28,
+            facecolors='white',
+            edgecolors='black',
+            linewidths=0.9,
+            zorder=4,
+        )
 
     ax.set_ylabel('mIoU (%)', fontweight='bold')
-    ax.set_title('MSCG 5-Fold Cross-Validation: Overall Method Comparison (n=35136 images)',
-                 fontweight='bold', pad=20)
     ax.set_xticks(x)
     ax.set_xticklabels(method_names)
-    ax.set_ylim(0, y_max + 15)
+    ax.set_ylim(0, 100)
     ax.grid(axis='y', alpha=0.3, linestyle='--')
     ax.set_axisbelow(True)
+    ax.legend(
+        handles=[
+            Patch(facecolor='0.75', edgecolor='black', label='Five-fold mean'),
+            Line2D([0], [0], color='black', linewidth=1.5, label='Population SD'),
+            Line2D([0], [0], marker='o', color='black', markerfacecolor='white',
+                   linestyle='None', label='Fold score'),
+        ],
+        loc='upper right',
+        framealpha=0.95,
+        fontsize=9,
+    )
 
     plt.tight_layout()
     plt.savefig(output_dir / 'figure_overall_comparison_1.png', dpi=300, bbox_inches='tight')
@@ -204,7 +191,7 @@ def figure2_per_scale_comparison(data: Dict, output_dir: Path):
     # For point plot style, we use markers and lines
     markers = {'sam': 'o', 'deeplabv3': 's', 'xgb': '^'}
     
-    for method in data['methods']:
+    for method in ['sam', 'deeplabv3', 'xgb']:
         method_data = per_scale_data.get(method, {})
         y_vals = []
         for scale in scales:
@@ -218,7 +205,6 @@ def figure2_per_scale_comparison(data: Dict, output_dir: Path):
 
     ax.set_xlabel('Geometric Complexity Scale (% of image area)', fontweight='bold')
     ax.set_ylabel('mIoU (%)', fontweight='bold')
-    ax.set_title('Per-Scale Performance Comparison (Point Plot)', fontweight='bold', pad=15)
     ax.set_xticks(x)
     ax.set_xticklabels(['s1\n(<1%)', 's2\n(1-3%)', 's3\n(3-10%)', 's4\n(10-30%)', 's5\n(>30%)'])
     ax.legend(loc='upper right', framealpha=0.95)
@@ -235,54 +221,30 @@ def figure2_per_scale_comparison(data: Dict, output_dir: Path):
 
 
 def figure3_robustness_trajectory(data: Dict, output_dir: Path):
-    """Figure 3: Severity-endpoint robustness trajectory (line plot) - matches trajectory_severity.png style"""
-    
-    # Load effective robustness data for endpoints
-    eff_robustness_path = Path(__file__).resolve().parents[2] / 'figures' / 'effective_robustness.json'
-    eff_data = {}
-    if eff_robustness_path.exists():
-        with open(eff_robustness_path) as f:
-            eff_data = json.load(f)
-    
-    # Use per_severity_data from fold summaries for trajectory
-    per_severity_data = data.get('per_severity_data', {})
-    
-    # Plot SAM+LoRA trajectory
-    sam_data = per_severity_data.get('sam', {})
-    severities = sorted([int(k) for k in sam_data.keys()])
-    sam_miou = [sam_data[str(k)] for k in severities]  # 0-1 scale
-    
-    # Plot Classical (XGBoost) trajectory  
-    xgb_data = per_severity_data.get('xgb', {})
-    xgb_miou = [xgb_data.get(str(k), np.nan) for k in severities]
-    
-    # Match trajectory_severity.png style exactly
-    plt.figure(figsize=(6.5, 3.6))
-    plt.plot(severities, sam_miou, label='SAM+LoRA', color='#1f77b4', marker='o')
-    plt.plot(severities, xgb_miou, label='Classical', color='#d62728', marker='o')
-    plt.xlabel('Severity (k)')
-    plt.ylabel('Two-class mIoU')
-    plt.title('Performance Trajectory vs Severity')
-    plt.ylim(0.0, 1.0)
-    plt.grid(alpha=0.3)
-    plt.legend()
-    plt.tight_layout()
-    plt.savefig(output_dir / 'figure_robustness_comparison.png', dpi=300, bbox_inches='tight')
-    plt.savefig(output_dir / 'figure_robustness_comparison.pdf', bbox_inches='tight')
-    plt.close()
-    
-    print("Figure 3: Robustness trajectory saved (trajectory_severity style)")
+    """Manuscript Figure 6 and Table 8 share all three methods and five folds."""
+    base_dir = Path(__file__).resolve().parents[2]
+    if str(base_dir) not in sys.path:
+        sys.path.insert(0, str(base_dir))
+    from analysis.compute_effective_robustness import build_summary, write_outputs
+
+    summary = build_summary(base_dir / 'artifacts' / 'newdata' / 'ws1_kfold')
+    write_outputs(summary, output_dir, base_dir / 'tables' / 'table_robustness_k_levels.tex')
+    print("Robustness figure, table, and fold statistics saved (three methods, five folds)")
 
 
 def generate_results_table(data: Dict, output_dir: Path):
-    """Generate LaTeX table for three-way comparison"""
+    """Generate the three-panel LaTeX comparison table used in the manuscript."""
 
-    latex = r"""\begin{table*}[ht]
+    latex = r"""\begin{table}[htbp]
 \centering
-\caption{MSCG matched five-fold comparison of the three segmentation methods. Metrics are averaged over the 5 shared test folds.}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\caption{Matched five-fold comparison of the three systems under the MSCG complete-grid protocol. Panel A reports binary metrics computed from pooled pixels, with mIoU and Dice macro-averaged over background and foreground, using all 24 records per source (including nine no-transform records). Panel B reports paired within-fold mIoU differences, and Panel C summarizes the accuracy-evaluation operating points.}
 \label{tab:three_way_results}
-\begin{tabular}{@{}>{\raggedright\arraybackslash}p{0.24\textwidth}@{}>{\centering\arraybackslash}p{0.18\textwidth}@{}>{\centering\arraybackslash}p{0.20\textwidth}@{}>{\centering\arraybackslash}p{0.30\textwidth}@{}>{\centering\arraybackslash}p{0.08\textwidth}@{}}
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccc@{}}
 \toprule
+\multicolumn{5}{@{}l}{\textbf{Panel A. Overall performance}} \\
+\midrule
 \textbf{Method} & \textbf{mIoU (\%)} & \textbf{Dice (\%)} & \textbf{Accuracy (\%)} & \textbf{Rank} \\
 \midrule
 """
@@ -293,46 +255,73 @@ def generate_results_table(data: Dict, output_dir: Path):
         dice = data['comparison'][method]['dice']
         acc = data['comparison'][method]['accuracy']
 
-        symbol = r"\textbf{*}" if rank == 1 else ""
-        latex += f"{LABELS[method]}{symbol} & {miou['mean']*100:.2f} $\\pm$ {miou['std']*100:.2f} & "
-        latex += f"{dice['mean']*100:.2f} $\\pm$ {dice['std']*100:.2f} & "
-        latex += f"{acc['mean']*100:.2f} $\\pm$ {acc['std']*100:.2f} & {rank} \\\\\n"
+        label = LABELS[method]
+        miou_text = f"{miou['mean']*100:.2f} $\\pm$ {miou['std']*100:.2f}"
+        dice_text = f"{dice['mean']*100:.2f} $\\pm$ {dice['std']*100:.2f}"
+        acc_text = f"{acc['mean']*100:.2f} $\\pm$ {acc['std']*100:.2f}"
+        rank_text = str(rank)
+        if rank == 1:
+            label = rf"\textbf{{{label}}}"
+            miou_text = rf"\textbf{{{miou_text}}}"
+            dice_text = rf"\textbf{{{dice_text}}}"
+            acc_text = rf"\textbf{{{acc_text}}}"
+            rank_text = rf"\textbf{{{rank_text}}}"
+        latex += f"{label} & {miou_text} & {dice_text} & {acc_text} & {rank_text} \\\\\n"
 
-    latex += r"""\midrule
-\multicolumn{5}{l}{\textbf{Pairwise Comparisons (paired $t$-tests; Bonferroni-adjusted $p$-values):}} \\
+    latex += r"""\bottomrule
+\end{tabular*}
+
+\vspace{0.15cm}
+
+\begin{tabular*}{\textwidth}{@{\extracolsep{\fill}}lcccccc@{}}
+\toprule
+\multicolumn{7}{@{}l}{\textbf{Panel B. Fold-level paired mIoU differences (percentage points)}} \\
+\midrule
+\textbf{Comparison} & \textbf{Fold 0} & \textbf{Fold 1} & \textbf{Fold 2} & \textbf{Fold 3} & \textbf{Fold 4} & \textbf{Mean $\Delta$} \\
+\midrule
 """
 
     pairs = [
-        ('sam_vs_deeplabv3', 'SAM+LoRA vs DeepLabV3+'),
-        ('sam_vs_xgb', 'SAM+LoRA vs VGG16+XGBoost'),
-        ('xgb_vs_deeplabv3', 'DeepLabV3+ vs VGG16+XGBoost'),
+        ('sam', 'deeplabv3', 'SAM+LoRA $-$ DeepLabV3+'),
+        ('sam', 'xgb', 'SAM+LoRA $-$ VGG16+XGBoost'),
+        ('deeplabv3', 'xgb', 'DeepLabV3+ $-$ VGG16+XGBoost'),
     ]
 
-    for pair_key, desc in pairs:
-        raw_p = data['pairwise_tests'][pair_key]['miou']['t_test']['p_value']
-        p_val = bonferroni_adjust(raw_p)
-        display_sign = -1 if pair_key == 'xgb_vs_deeplabv3' else 1
-        cohen_d = data['pairwise_tests'][pair_key]['miou']['cohen_d'] * display_sign
-        mean_diff = data['pairwise_tests'][pair_key]['miou']['mean_diff'] * 100 * display_sign
-
-        sig = significance_marker(p_val)
-        p_str = format_p_value_latex(p_val)
-        latex += (
-            "\\multicolumn{5}{l}{\\quad "
-            f"{desc}: $\\Delta$={mean_diff:+.2f}\\%, "
-            f"$p_{{\\mathrm{{adj}}}}={p_str}$ {sig}, "
-            f"$d={cohen_d:.2f}$"
-            "} \\\\\n"
-        )
+    for first, second, desc in pairs:
+        first_values = np.asarray(data['comparison'][first]['miou']['values'])
+        second_values = np.asarray(data['comparison'][second]['miou']['values'])
+        differences = (first_values - second_values) * 100
+        fold_text = " & ".join(f"{value:+.2f}" for value in differences)
+        mean_text = f"{np.mean(differences):+.2f}"
+        latex += f"{desc} & {fold_text} & \\textbf{{{mean_text}}} \\\\\n"
 
     latex += r"""\bottomrule
-\end{tabular}
+\end{tabular*}
+
+\vspace{0.15cm}
+
+\begin{tabularx}{\textwidth}{@{}lX@{}}
+\toprule
+\multicolumn{2}{@{}l}{\textbf{Panel C. Accuracy-evaluation operating points}} \\
+\midrule
+\textbf{System} & \textbf{Operating point} \\
+\midrule
+SAM+LoRA
+& $1024\times1024$; pre-trained SAM ViT-H with rank-8 LoRA and a trainable mask decoder; \texttt{P1} mask-derived two-point prompt; candidate with the highest predicted IoU; bilinear upsampling; and threshold $\tau=0.5$. \\
+
+DeepLabV3+
+& $512\times512$; ImageNet-pretrained ResNet-101; no prompt; sigmoid threshold $\tau=0.5$; and nearest-neighbor resizing. \\
+
+VGG16+XGBoost
+& $64\times64$ patches with a stride of 32, resized to $224\times224$ for VGG16; fixed ImageNet-pretrained VGG16 plus XGBoost; patch reconstruction; and Dense CRF. \\
+\bottomrule
+\end{tabularx}
+
 \vspace{0.2cm}
 
-\footnotesize
-* Winner (best overall mIoU). Significance levels for Bonferroni-adjusted $p$-values: *** $p_{\mathrm{adj}}<0.001$, ** $p_{\mathrm{adj}}<0.01$, * $p_{\mathrm{adj}}<0.05$. \\
-All pairwise comparisons use paired t-tests with n=5 folds. Cohen's d: small (0.2), medium (0.5), large (0.8).
-\end{table*}
+\scriptsize
+\textit{Note.} Positive values favor the first method listed in each comparison. Fold-level differences were computed from the unrounded mIoU values and rounded to two decimal places for display. Boldface highlights the best-performing row in Panel A and the mean differences in Panel B.
+\end{table}
 """
 
     with open(output_dir / 'table_three_way_results.tex', 'w') as f:
@@ -342,6 +331,9 @@ All pairwise comparisons use paired t-tests with n=5 folds. Cohen's d: small (0.
 
 
 def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument('--robustness-only', action='store_true', help='Regenerate only Figure 6, Table 8, and their statistics')
+    args = parser.parse_args()
     # Project root is two levels up from artifacts/code/
     base_dir = Path(__file__).resolve().parents[2]
     stats_dir = base_dir / 'artifacts' / 'newdata' / 'ws1_kfold'
@@ -349,6 +341,10 @@ def main():
     tables_dir = base_dir / 'tables'
     figures_dir.mkdir(parents=True, exist_ok=True)
     tables_dir.mkdir(parents=True, exist_ok=True)
+
+    if args.robustness_only:
+        figure3_robustness_trajectory({}, figures_dir)
+        return
 
     print("=" * 70)
     print("GENERATING THREE-WAY COMPARISON FIGURES")

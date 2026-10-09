@@ -131,22 +131,29 @@ segment-anything: 1.0（按实验环境使用 `--no-deps` 安装）
 
 ## 6. 严重度鲁棒性
 
-端点鲁棒性由 `analysis/compute_effective_robustness.py` 根据 fold0 的 `per_cell.csv` 计算，按每个 cell 的 `count` 加权。结果如下：
+2026-09-25 更新：端点分析由原来的 fold0 两方法展示扩展为三种方法的全部五折。输入为 `fold{0..4}/{sam,deeplabv3,xgb}/per_cell.csv` 共 15 个文件，每个文件保留完整的 120 个单元格。每折、每个严重度先按 evaluated-pixel `count` 对 20 个 cell 的 mIoU 加权平均，再在折内计算端点下降、保持率和 ER-AUS，最后取五折均值及总体标准差（ddof=0）。
 
-| 指标 | SAM+LoRA（r8） | VGG16+XGBoost |
-|---|---:|---:|
-| mIoU@k0（clean） | 82.74% | 57.81% |
-| mIoU@k5 | 81.21% | 53.95% |
-| ER-end（k5/k0） | 98.16% | 93.32% |
-| ER-AUS | 99.15% | 95.52% |
-| k5 保持 ≥60% | 是 | 否 |
+以下各项为均值 ± 折间总体标准差：
 
-fold0 的逐级 mIoU 为：
+| 指标 | SAM+LoRA（r8） | DeepLabV3+ | VGG16+XGBoost |
+|---|---:|---:|---:|
+| mIoU@k0（%） | 84.23 ± 1.14 | 73.86 ± 1.20 | 58.51 ± 0.68 |
+| mIoU@k5（%） | 82.43 ± 1.13 | 72.40 ± 1.15 | 54.67 ± 0.73 |
+| 绝对端点下降（pp） | 1.79 ± 0.16 | 1.46 ± 0.36 | 3.84 ± 0.29 |
+| ER-end（%） | 97.87 ± 0.19 | 98.02 ± 0.49 | 93.44 ± 0.50 |
+| ER-AUS（%） | 98.85 ± 0.19 | 98.74 ± 0.28 | 95.60 ± 0.32 |
+
+五折平均逐级 mIoU（%）为：
 
 | 严重度 | k0 | k1 | k2 | k3 | k4 | k5 |
 |---|---:|---:|---:|---:|---:|---:|
-| SAM+LoRA（r8） | 82.74% | 82.39% | 82.32% | 82.01% | 81.53% | 81.21% |
-| VGG16+XGBoost | 57.81% | 55.24% | 55.38% | 54.49% | 54.46% | 53.95% |
+| SAM+LoRA（r8） | 84.23 | 83.59 | 83.52 | 83.01 | 82.75 | 82.43 |
+| DeepLabV3+ | 73.86 | 73.04 | 72.84 | 72.77 | 72.63 | 72.40 |
+| VGG16+XGBoost | 58.51 | 56.17 | 55.92 | 55.33 | 55.00 | 54.67 |
+
+逐折完整结果及输入哈希保存在 `figures_new/effective_robustness.json`，逐折端点指标另存于 `figures_new/robustness_fold_metrics.csv`。图 6 绘制五折均值轨迹；JSON 和表 8 中的标准差表示折间总体标准差，不表示置信区间。保持率先逐折计算，不能以五折均值之比替代。
+
+本轮保留原来的完整网格 cell 加权口径，包括 k1--k5 中的 clean 条件。因此，本轮解决方法和折的覆盖问题；去除 no-transform 重复记录后的 corrupted-only pooled mIoU 属于后续单独分析。SAM+LoRA 的绝对轨迹 mIoU 更高；DeepLabV3+ 的平均端点保持率略高，二者不应混同为同一个优势。
 
 ## 7. 尺度分析
 
@@ -200,13 +207,13 @@ python artifacts/code/generate_three_way_figures.py
 python artifacts/code/generate_fullft_vs_lora_figure.py
 ```
 
-输出目录为 `figures_new/` 和 `tables/`。生成 fold0 鲁棒性结果时可执行：
+输出目录为 `figures_new/` 和 `tables/`。生成三种方法、五个共享 fold 的鲁棒性结果时可执行：
 
 ```bash
 python analysis/compute_effective_robustness.py \
-  --sam-csv artifacts/newdata/ws1_kfold/fold0/sam/per_cell.csv \
-  --cls-csv artifacts/newdata/ws1_kfold/fold0/xgb/per_cell.csv \
-  --output-dir figures_new
+  --stats-dir artifacts/newdata/ws1_kfold \
+  --output-dir figures_new \
+  --table-output tables/table_robustness_k_levels.tex
 ```
 
 ## 10. 原始训练脚本的外部路径

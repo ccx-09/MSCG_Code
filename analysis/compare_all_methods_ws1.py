@@ -4,7 +4,6 @@ import json
 import numpy as np
 from pathlib import Path
 from scipy import stats
-from tabulate import tabulate
 
 def load_method_results(stats_dir: Path, method: str, num_folds: int=5):
     results = []
@@ -13,7 +12,7 @@ def load_method_results(stats_dir: Path, method: str, num_folds: int=5):
         if summary_file.exists():
             with open(summary_file) as f:
                 data = json.load(f)
-                results.append({'fold': fold, 'miou': data['overall']['miou'], 'dice': data['overall']['dice'], 'accuracy': data['overall']['accuracy'], 'per_scale_miou': data.get('per_scale_miou', {}), 'per_severity_miou': data.get('per_severity_miou', {}), 'per_corruption_miou': data.get('per_corruption_miou', {}), 'brittleness': data.get('brittleness_coefficient', np.nan)})
+                results.append({'fold': fold, 'miou': data['overall']['miou'], 'dice': data['overall']['dice'], 'accuracy': data['overall']['accuracy'], 'per_scale_cell_macro_miou': data.get('per_scale_cell_macro_miou', data.get('per_scale_miou', {})), 'per_scale_pooled_miou': data.get('per_scale_pooled_miou', {}), 'per_severity_miou': data.get('per_severity_miou', {}), 'per_corruption_miou': data.get('per_corruption_miou', {}), 'brittleness': data.get('brittleness_coefficient', np.nan)})
     return results
 
 def compute_statistics(values):
@@ -71,14 +70,14 @@ def main():
         row = [scale]
         for method in complete_methods.keys():
             results = complete_methods[method]
-            scale_mious = [r['per_scale_miou'].get(scale, np.nan) for r in results if r['per_scale_miou']]
+            scale_mious = [r['per_scale_cell_macro_miou'].get(scale, np.nan) for r in results if r['per_scale_cell_macro_miou']]
             if scale_mious:
                 mean_miou = np.nanmean(scale_mious)
                 row.append(f'{mean_miou:.4f}')
             else:
                 row.append('N/A')
         scale_table.append(row)
-    output_data = {'methods': list(complete_methods.keys()), 'num_folds': 5, 'comparison': comparison, 'pairwise_tests': pairwise_tests, 'rankings': rankings, 'summary': {'best_method': rankings[0], 'best_miou': comparison[rankings[0]]['miou']['mean']}}
+    output_data = {'methods': list(complete_methods.keys()), 'num_folds': 5, 'comparison': comparison, 'pairwise_tests': pairwise_tests, 'rankings': rankings, 'scale_table_cell_macro_miou': scale_table, 'scale_aggregation': 'unweighted mean of cell-level mIoUs within each scale, followed by the five-fold mean', 'summary': {'best_method': rankings[0], 'best_miou': comparison[rankings[0]]['miou']['mean']}}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     with open(args.output, 'w') as f:
         json.dump(output_data, f, indent=2)

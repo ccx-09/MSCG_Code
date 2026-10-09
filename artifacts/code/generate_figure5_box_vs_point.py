@@ -21,15 +21,10 @@ def generate(output_path: str, data_path: str) -> None:
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
     data = load_results(data_path)
 
-    cell = data.get("cell", {})
-    corruption = cell.get("corruption", "?")
-    scale_bin = cell.get("scale_bin", "?")
-    severity = cell.get("severity", "?")
 
     pairs = [(r["iou_before"], r["iou_after"]) for r in data.get("results", [])]
     mean_before = float(data.get("mean_before", 0.0))
     mean_after = float(data.get("mean_after", 0.0))
-    delta = mean_after - mean_before
 
     # Figure layout
     fig = plt.figure(figsize=(11.5, 5.2))
@@ -58,7 +53,6 @@ def generate(output_path: str, data_path: str) -> None:
     ax_left.set_xlabel("IoU")
     ax_left.grid(axis="x", color="#e5e7eb")
     ax_left.legend(frameon=False, loc="lower right")
-    ax_left.text(0.02, -0.18, "Each line shows one example's IoU from Point (red) to Box (green)", transform=ax_left.transAxes, fontsize=10, color="#374151")
 
     # Right: mean before vs after
     ax_right.set_title("Mean IoU", pad=8)
@@ -69,12 +63,6 @@ def generate(output_path: str, data_path: str) -> None:
     ax_right.set_ylabel("IoU")
     ax_right.grid(axis="y", color="#e5e7eb")
 
-    # Super‑title with cell and delta
-    title = (
-        f"Mitigation via Prompt Engineering — {corruption} · {scale_bin} · k{severity}\n"
-        f"Mean IoU: {mean_before:.3f} → {mean_after:.3f}  (Δ {delta:+.3f})"
-    )
-    fig.suptitle(title, fontsize=14, fontweight="bold", y=1.02)
 
     fig.subplots_adjust(top=0.82, left=0.08, right=0.98, bottom=0.16)
     fig.savefig(output_path, dpi=200, bbox_inches="tight")

@@ -59,7 +59,7 @@ def generate_method_comparison_figure(output_dir: Path, full_ft_data: dict, lora
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(10, 5))
 
     # Prepare data
-    methods = ['Full FT', 'LoRA r=16', 'LoRA r=8', 'LoRA r=4']
+    methods = ['Full FT', 'SAM+LoRA r=16', 'SAM+LoRA r=8', 'SAM+LoRA r=4']
     means = [
         full_ft_data['mean'],
         lora_data['r16']['mean'],
@@ -161,7 +161,7 @@ def generate_pareto_frontier_figure(output_dir: Path, full_ft_data: dict, lora_d
     fig, ax = plt.subplots(figsize=(8, 6))
 
     # Data points
-    methods = ['Full FT', 'LoRA r=16', 'LoRA r=8', 'LoRA r=4']
+    methods = ['Full FT', 'SAM+LoRA r=16', 'SAM+LoRA r=8', 'SAM+LoRA r=4']
     means = [
         full_ft_data['mean'],
         lora_data['r16']['mean'],

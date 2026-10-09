@@ -32,3 +32,5 @@ build/
 *.swo
 *~
 .core/
+/figures_new/
+/tables/

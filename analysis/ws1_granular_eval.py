@@ -86,6 +86,7 @@ def main():
     corr_order = sorted(corrs_seen)
     overall_cm = np.zeros((args.num_classes, args.num_classes), dtype=np.int64)
     cell_cm: Dict[Tuple[str, str, str], np.ndarray] = {}
+    scale_cm: Dict[str, np.ndarray] = {}
     per_image_rows = []
     pred_files = sorted(pred_dir.rglob('*.png'))
     strip_suffixes = ['_crf', '_raw', '_pred', '_mask', '_seg', '-crf', '-raw']
@@ -142,6 +143,9 @@ def main():
             pred = (pred > 0).astype(np.uint8)
         cm = compute_confusion(pred, gt, args.num_classes)
         overall_cm += cm
+        if scale not in scale_cm:
+            scale_cm[scale] = np.zeros((args.num_classes, args.num_classes), dtype=np.int64)
+        scale_cm[scale] += cm
         matched += 1
         key = (m['scale_bin'], m['severity'], m['corruption'])
         if key not in cell_cm:
@@ -170,9 +174,49 @@ def main():
                     count = int(cm.sum())
                     per_cell[key] = {'miou': miou_c, 'dice': mdice_c, 'accuracy': acc_c}
                     writer.writerow({'corruption': corr, 'scale_bin': scale, 'severity': sev, 'count': count, 'miou': f'{miou_c:.6f}', 'dice': f'{mdice_c:.6f}', 'accuracy': f'{acc_c:.6f}'})
+
+    # Audit artifact for the scale-level aggregation.  Each row is the
+    # fold-level confusion matrix pooled over all corruptions and severities
+    # in that scale bin; it is deliberately kept separate from per_cell.csv.
+    per_scale_csv = out_dir / 'per_scale.csv'
+    with open(per_scale_csv, 'w', newline='', encoding='utf-8') as f:
+        writer = csv.DictWriter(f, fieldnames=['scale_bin', 'tn', 'fp', 'fn', 'tp', 'pixels', 'pooled_miou', 'pooled_dice', 'pooled_accuracy', 'cell_macro_miou'])
+        writer.writeheader()
+        for scale in scales_order:
+            cm = scale_cm.get(scale)
+            if cm is None:
+                continue
+            if args.num_classes != 2:
+                raise ValueError('per_scale.csv audit output requires binary evaluation (num_classes=2)')
+            miou_s, mdice_s, acc_s = iou_dice_acc_from_confusion(cm)
+            cell_vals = [per_cell[scale, sev, corr]['miou'] for sev in sevs_order for corr in corr_order if (scale, sev, corr) in per_cell]
+            writer.writerow({
+                'scale_bin': scale,
+                'tn': int(cm[0, 0]),
+                'fp': int(cm[0, 1]),
+                'fn': int(cm[1, 0]),
+                'tp': int(cm[1, 1]),
+                'pixels': int(cm.sum()),
+                'pooled_miou': f'{miou_s:.6f}',
+                'pooled_dice': f'{mdice_s:.6f}',
+                'pooled_accuracy': f'{acc_s:.6f}',
+                'cell_macro_miou': f'{float(np.mean(cell_vals)):.6f}' if cell_vals else 'nan',
+            })
+
     overall_miou, overall_mdice, overall_acc = iou_dice_acc_from_confusion(overall_cm)
 
-    def agg_by_scale():
+    def agg_by_scale_pooled():
+        rows = []
+        for scale in scales_order:
+            cm = scale_cm.get(scale)
+            if cm is None:
+                rows.append((scale, float('nan')))
+            else:
+                miou_s, _, _ = iou_dice_acc_from_confusion(cm)
+                rows.append((scale, miou_s))
+        return rows
+
+    def agg_by_scale_cell_macro():
         rows = []
         for scale in scales_order:
             vals = [per_cell[scale, sev, corr]['miou'] for sev in sevs_order for corr in corr_order if (scale, sev, corr) in per_cell]
@@ -193,7 +237,9 @@ def main():
             rows.append((corr, float(np.mean(vals)) if vals else float('nan')))
         return rows
     bc = brittleness_coefficient(per_cell, scales_order, sevs_order)
-    summary = {'overall': {'miou': overall_miou, 'dice': overall_mdice, 'accuracy': overall_acc}, 'per_scale_miou': dict(agg_by_scale()), 'per_severity_miou': dict(agg_by_sev()), 'per_corruption_miou': dict(agg_by_corr()), 'brittleness_coefficient': bc, 'meta': {'num_classes': args.num_classes, 'ws1_json': str(ws1_json), 'pred_dir': str(pred_dir), 'gt_dir': str(gt_dir), 'num_pred_files_found': len(pred_files), 'num_images_in_json': len(images), 'num_pred_matched': matched, 'num_skipped_no_meta': skipped_no_meta, 'num_skipped_no_gt': skipped_no_gt}}
+    scale_cell_macro = dict(agg_by_scale_cell_macro())
+    scale_pooled = dict(agg_by_scale_pooled())
+    summary = {'overall': {'miou': overall_miou, 'dice': overall_mdice, 'accuracy': overall_acc}, 'per_scale_miou': scale_cell_macro, 'per_scale_cell_macro_miou': scale_cell_macro, 'per_scale_pooled_miou': scale_pooled, 'per_severity_miou': dict(agg_by_sev()), 'per_corruption_miou': dict(agg_by_corr()), 'brittleness_coefficient': bc, 'meta': {'num_classes': args.num_classes, 'ws1_json': str(ws1_json), 'pred_dir': str(pred_dir), 'gt_dir': str(gt_dir), 'num_pred_files_found': len(pred_files), 'num_images_in_json': len(images), 'num_pred_matched': matched, 'num_skipped_no_meta': skipped_no_meta, 'num_skipped_no_gt': skipped_no_gt}}
     out_json = out_dir / 'summary.json'
     out_json.write_text(json.dumps(summary, indent=2))
     try:
